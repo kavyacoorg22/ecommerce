@@ -33,7 +33,7 @@ label {
   font-size: 16px; /* Larger font size */
 }
 
-input[type="text"],
+input[type="email"],
 input[type="password"] {
   width: 400px;
   padding: 12px 5px; /* Increased padding for input fields */
@@ -94,10 +94,11 @@ input[type="password"] {
   color: #666;
 }
 
-.signup-link span {
+.signup-link a{
   color: #4CAF50;
   cursor: pointer;
   font-weight: bold;
+  text-decoration: none;
 }
 
 .forgot-link {

@@ -1,4 +1,8 @@
 const signupModel=require('../model/signupModel')
+const loginModel=require('../model/loginModel')
+const jwt=require("jsonwebtoken")
+require('dotenv').config();
+
 
 const bcrypt=require('bcrypt')
 
@@ -24,64 +28,110 @@ const loadsignup=async(req,res)=>{
 
 const loadLogin=async(req,res)=>{
   try{
-     res.render('userAuth/login',{title:"login",layout:"./layout/auth-layout",csspage:'login.css'})
+     res.render('userAuth/login',{title:"login",layout:"./layout/auth-layout",csspage:'login.css',email:' ',password:' '})
   }catch(err)
   {
     res.send(err.message)
   }
 }
 
-// const login=async(req,res)=>{
-//   try{
 
-//   }catch(err)
-//   {
 
-//   }
-// }
 
-const signup=async(req,res)=>{
-  try{
+const signup = async (req, res) => {
+  try {
     const { firstname, lastname, email, number, password, confirmPassword } = req.body;
-        
-      
     
-        const exitstingUser=await signupModel.findOne({email:req.body.email})
-        if(exitstingUser)
-        {
-          res.status(400).json({
-            success:false,
-            message:"Email is already registered."
-          })
-        }
-        //hash password
-        const hashedPassword=await bcrypt.hash(password,10)
+    // Check for existing user
+    const existingUser = await signupModel.findOne({ email: req.body.email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is already registered."
+      });
+    }
 
-        //create new user
-        const user=new signupModel(
-          {
-            firstname,
-            lastname,
-            email,
-            number,
-            password:hashedPassword,
-            confirmPassword
-          }
-        )
-        await user.save();
-        
-        res.status(201).json({
-          success: true,
-          message: "User registered successfully.",
-        });
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-  }catch(err)
-  {
+    // Create new user
+    const user = new signupModel({
+      firstname,
+      lastname,
+      email,
+      number,
+      password: hashedPassword,
+      confirmPassword
+    });
+    
+    await user.save();
+    
+    return res.status(201).json({
+      success: true,
+      message: "User registered successfully."
+    });
+
+  } catch (err) {
     console.error(err.message);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "An error occurred during signup. Please try again later.",
+      message: "An error occurred during signup. Please try again later."
     });
   }
-}
-module.exports={loadsignup,loadLogin,signup}
+};
+
+const login = async (req, res) => {
+  try {
+    
+    const { email, password } = req.body;
+
+    // Fetch user from the database by email
+    const user = await signupModel.findOne({ email });
+
+    // Check if user exists
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid credentials',
+      });
+    }
+
+    // Compare the provided password with the hashed password in the database
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid credentials',
+      });
+    }
+
+    // Create JWT token
+    const token = await jwt.sign({ _id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+  
+
+    // Set cookie with secure options
+    res.cookie("token", token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' ,sameSite: 'Strict',});
+
+   const newUser=new loginModel({
+     email,
+     password
+   })
+   console.log(newUser)
+   newUser.save()
+  
+    // Respond with success
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
+    });
+  
+  } catch (error) {
+    console.error('Error during login:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'An error occurred during login',
+    });
+  }
+};
+
+module.exports={loadsignup,loadLogin,signup,login}
