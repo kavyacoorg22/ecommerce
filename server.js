@@ -8,6 +8,7 @@ const cookieParser=require('cookie-parser')
 const cors=require('cors')
 const session=require('express-session')
 const MongoStore = require('connect-mongo');
+const path=require('path')
 
 
 const port = process.env.PORT || 3000;
@@ -19,8 +20,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser())
 
 
-
+app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use(express.static('public'));
+
+app.use('/js', express.static(path.join(__dirname, 'public/js')));
+app.use('/css', express.static(path.join(__dirname, 'public/css')));
+
+app.use('/fonts', express.static(path.join(__dirname, 'public/fonts')));
 
 // Setting Views Folder and View Engine
 app.set('views', './views');
@@ -46,6 +52,11 @@ app.use(session({
 
 
 // Routes
+
+app.use((req, res, next) => {
+  res.header('X-Content-Type-Options', 'nosniff');
+  next();
+});
 app.use('/user',userRouter)
 
 // Start the Server
@@ -53,9 +64,8 @@ connectDB()
 .then(()=>
 {
   console.log("Database connection established succesfully")
-  app.listen(port, () => console.log(`Server running properly on http://localhost:${port}`));
+  app.listen(port, () => console.log("Server running properly on http://localhost:${port}"));
 })
 .catch(()=>{
   console.log('Database connection lost',err.message)
 })
-
