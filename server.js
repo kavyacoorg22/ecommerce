@@ -35,20 +35,19 @@ app.set('layout', './layout/user-layout.ejs'); // Default layout for all views
 app.set('view engine', 'ejs');
 
 //session
+
+
 app.use(session({
   store: MongoStore.create({
-      mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/your-db',
-      ttl: 24 * 60 * 60 // Session TTL in seconds
+    mongoUrl: 'mongodb://localhost:27017/yourdb'
   }),
-  secret: process.env.SESSION_SECRET || 'your-secret-key',
-  resave: false,
+  secret: 'mysecret',
+  resave: true,
   saveUninitialized: false,
-  cookie: {
-      secure: process.env.NODE_ENV === 'production',
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000
-  }
+  cookie: { maxAge: 24 * 60 * 60 * 1000 }
 }));
+
+
 
 
 // Routes

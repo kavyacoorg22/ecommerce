@@ -18,16 +18,17 @@ router.get('/email',userAuthController.loademail)
 router.post('/email',userAuthController.email)
 
 router.get('/otp',userAuthController.loadotp)
-router.post('/otp',userAuthController.verifyotp)
+router.post('/verifyotp',userAuthController.verifyotp)
+router.post('/resendotp',userAuthController.resendotp)
 
 router.get('/password',userAuthController.password)
-router.get('/password',userAuthController.resetPassword)
+router.post('/password',userAuthController.resetPassword)
 
 router.get('/home',homeController.home)
 
 router.get('/shop',userAuth,homeController.shop)
 
 
-router.get('/product',userAuth,homeController.product)
+router.get('/product/:id',userAuth,homeController.product)
 
 module.exports=router

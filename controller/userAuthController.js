@@ -135,7 +135,7 @@ const login = async (req, res) => {
     res.cookie("token", token, {
       httpOnly: true, 
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Strict',
+      
     });
 
     // Send the response LAST, after setting headers and cookies
@@ -164,69 +164,260 @@ const loademail=async(req,res)=>{
 
 const email = async (req, res) => {
   try {
-    const { email } = req.body;
-    
-    // Validate email input
-    if (!email) {
-      return res.status(400).json({ 
-        success: false,
-        message: "Email is required" 
+      const { email } = req.body;
+      
+      // Validate email input
+      if (!email) {
+          return res.status(400).json({ 
+              success: false,
+              message: "Email is required" 
+          });
+      }
+
+      // Find user
+      const user = await signupModel.findOne({ email });
+      
+      if (!user) {
+          return res.status(404).json({ 
+              success: false,
+              message: "Enter registered Email" 
+          });
+      }
+
+      // Generate OTP
+      const otp = generateOTP();
+      const expiryTime = Date.now() + 30 * 1000; // 30 seconds
+
+      // Store OTP data in session
+      req.session.otpData = {
+          email,
+          otp,
+          expiryTime
+      };
+
+      // Force save session before proceeding
+      await new Promise((resolve, reject) => {
+          req.session.save((err) => {
+              if (err) reject(err);
+              else resolve();
+          });
       });
-    }
 
-    // Find user
-    const user = await signupModel.findOne({ email });
-    
-    if (!user) {
-      return res.status(404).json({ 
-        success: false,
-        message: "Enter registered Email" 
-      });
-    }
-
-    // Generate OTP
-    const otp = generateOTP();
-
-    // Set expiry time to 30 seconds
-    const expiryTime = Date.now() + 30 * 1000;
-    
-    // Store OTP with expiry time
-    otpStore.set(email, { otp, expiryTime });
-
-    try {
+      
       // Send OTP email
       await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: 'Password Reset OTP',
-        text: `Your OTP for password reset is: ${otp}. Valid for 30 seconds.`
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: 'Password Reset OTP',
+          text: `Your OTP for password reset is: ${otp}. Valid for 30 seconds.`
       });
       
-      // Send success response
       return res.status(200).json({
-        success: true,
-        message: "OTP has been sent to your email",
-        redirectUrl: '/user/otp'  // Include redirect URL if needed
+          success: true,
+          message: "OTP has been sent to your email",
+          redirectUrl: '/user/otp'
       });
-
-    } catch (emailError) {
-      console.error('Email sending error:', emailError);
-      // Clean up OTP if email fails
-      otpStore.delete(email);
-      return res.status(500).json({ 
-        success: false,
-        message: "Failed to send OTP email. Please try again." 
-      });
-    }
 
   } catch (error) {
-    console.error('Server error:', error);
-    return res.status(500).json({ 
-      success: false,
-      message: 'An unexpected error occurred. Please try again.' 
-    });
+      console.error('Server error:', error);
+      return res.status(500).json({ 
+          success: false,
+          message: 'An unexpected error occurred. Please try again.' 
+      });
   }
 };
+
+
+
+
+const loadotp = async (req, res) => {
+  try {
+      // Force session reload before accessing data
+      await new Promise((resolve, reject) => {
+          req.session.reload((err) => {
+              if (err) reject(err);
+              else resolve();
+          });
+      });
+
+     
+      const otpData = req.session.otpData;
+      
+      if (!otpData || !otpData.email || !otpData.expiryTime) {
+          return res.redirect('/user/email');
+      }
+
+      res.render('userAuth/otp', {
+          title: "otp",
+          csspage: "otp.css",
+          layout: "./layout/auth-layout",
+          email: otpData.email,
+          expiryTime: otpData.expiryTime
+      });
+  } catch (err) {
+      console.error('Load OTP error:', err);
+      res.redirect('/user/email');
+  }
+};
+
+
+
+
+// const verifyotp = async (req, res) => {
+//   try {
+//       // Force session reload before verification
+//       await new Promise((resolve, reject) => {
+//           req.session.reload((err) => {
+//               if (err) reject(err);
+//               else resolve();
+//           });
+//       });
+
+//       const { otp } = req.body;
+//       const otpData = req.session.otpData;
+
+//       if (!otpData || !otpData.otp || !otpData.expiryTime) {
+//           return res.status(400).json({ 
+//               success: false,
+//               message: 'OTP expired or invalid' 
+//           });
+//       }
+
+//       if (Date.now() > otpData.expiryTime) {
+//           req.session.otpData = null;
+//           await new Promise(resolve => req.session.save(resolve));
+//           return res.status(400).json({ 
+//               success: false,
+//               message: 'OTP expired' 
+//           });
+//       }
+
+//       if (otp !== otpData.otp) {
+//           return res.status(400).json({ 
+//               success: false,
+//               message: 'Invalid OTP' 
+//           });
+//       }
+
+//       // Clear OTP data and save session
+//       req.session.otpData = null;
+//       await new Promise(resolve => req.session.save(resolve));
+
+//       res.json({ 
+//           success: true,
+//           redirectUrl: '/user/password'
+//       });
+//   } catch (error) {
+//       console.error('Verify OTP error:', error);
+//       res.status(500).json({ 
+//           success: false,
+//           message: 'Server error' 
+//       });
+//   }
+// };
+
+const verifyotp = async (req, res) => {
+  try {
+      // Force session reload before verification
+      await new Promise((resolve, reject) => {
+          req.session.reload((err) => {
+              if (err) reject(err);
+              else resolve();
+          });
+      });
+
+      const { otp } = req.body;
+      const otpData = req.session.otpData;
+
+      if (!otpData || !otpData.otp || !otpData.expiryTime) {
+          return res.status(400).json({ 
+              success: false,
+              message: 'OTP expired or invalid' 
+          });
+      }
+
+      if (Date.now() > otpData.expiryTime) {
+          req.session.otpData = null;
+          await new Promise(resolve => req.session.save(resolve));
+          return res.status(400).json({ 
+              success: false,
+              message: 'OTP expired' 
+          });
+      }
+
+      if (otp !== otpData.otp) {
+          return res.status(400).json({ 
+              success: false,
+              message: 'Invalid OTP' 
+          });
+      }
+
+      // Instead of clearing otpData, just update it to keep the email
+      req.session.otpData = {
+          email: otpData.email,  // Keep the email
+          verified: true         // Add a verification flag
+      };
+      await new Promise(resolve => req.session.save(resolve));
+
+      res.json({ 
+          success: true,
+          redirectUrl: '/user/password'
+      });
+  } catch (error) {
+      console.error('Verify OTP error:', error);
+      res.status(500).json({ 
+          success: false,
+          message: 'Server error' 
+      });
+  }
+};
+
+const resendotp = async (req, res) => {
+  try {
+      const { email } = req.body;
+      const otp = generateOTP();
+      const expiryTime = Date.now() + 60 * 1000; // 60 seconds
+
+      // Update session with new OTP data
+      req.session.otpData = {
+          email,
+          otp,
+          expiryTime
+      };
+
+      // Force save session before sending email
+      await new Promise((resolve, reject) => {
+          req.session.save((err) => {
+              if (err) reject(err);
+              else resolve();
+          });
+      });
+
+      await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: 'Password Reset OTP',
+          text: `Your new OTP for password reset is: ${otp}. Valid for 60 seconds.`
+      });
+
+      res.json({ 
+          success: true,
+          message: 'OTP resent successfully' 
+      });
+  } catch (error) {
+      console.error('Resend OTP error:', error);
+      res.status(500).json({ 
+          success: false,
+          message: 'Failed to resend OTP' 
+      });
+  }
+};
+
+
+
+
+
+
 
 const password=async(req,res)=>{
   try{
@@ -236,79 +427,93 @@ const password=async(req,res)=>{
     res.send(err.message)
   }
 }
+// const resetPassword= async (req, res) => {
+//   try {
+//     const { email, newPassword } = req.body;
 
-const loadotp=async(req,res)=>{
-  
- try{
+//     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-     res.render('userAuth/otp',{title:"otp",csspage:"otp.css",layout:"./layout/auth-layout"})
-  }catch(err)
-  {
-    res.send(err.message)
-  }
-}
-const verifyotp=async(req,res)=>{
+//     await signupModel.findOneAndUpdate(
+//       { email },
+//       { password: hashedPassword }
+//     );
+
+//     otpStore.delete(email);
+
+//     res.json({ message: 'Password reset successful' });
+//   } catch (error) {
+//     res.status(500).json({ error: 'Server error' });
+//   }
+// }
+const resetPassword = async (req, res) => {
+  console.log('Password reset request received');
+  console.log('Request body:', req.body);
+  console.log('Session data:', req.session);
   try {
-    const { email, otp } = req.body;
-    const storedOTPData = otpStore.get(email);
-
-    if (!storedOTPData) {
-      return res.status(400).json({ error: 'OTP expired or invalid' });
+    const { newPassword, confirmPassword } = req.body;
+    
+    // Check if session data exists and is verified
+    if (!req.session.otpData || !req.session.otpData.email || !req.session.otpData.verified) {
+      return res.status(400).json({
+        success: false,
+        message: "Please verify your OTP first"
+      });
     }
 
-    if (Date.now() > storedOTPData.expiryTime) {
-      otpStore.delete(email);
-      return res.status(400).json({ error: 'OTP expired' });
+    const { email } = req.session.otpData;
+
+    if (!email || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required"
+      });
+    }
+    // Check if passwords match
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Passwords don't match"
+      });
     }
 
-    if (otp !== storedOTPData.otp) {
-      return res.status(400).json({ error: 'Invalid OTP' });
-    }
-
-    res.render('userAuth/password', { email });
-  } catch (error) {
-    res.status(500).json({ error: 'Server error' });
-  }
-}
-
-const resendotp= async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    const otp = generateOTP();
-    const expiryTime = Date.now() + 30 * 1000;
-    otpStore.set(email, { otp, expiryTime });
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'Password Reset OTP',
-      text: `Your new OTP for password reset is: ${otp}. Valid for 30 seconds.`
-    });
-
-    res.json({ message: 'OTP resent successfully' });
-  } catch (error) {
-    res.status(500).json({ error: 'Server error' });
-  }
-}
-const resetPassword= async (req, res) => {
-  try {
-    const { email, newPassword } = req.body;
-
+    // Hash both passwords
     const hashedPassword = await bcrypt.hash(newPassword, 10);
+    //const hashedConfirmPassword = await bcrypt.hash(confirmPassword, 10);
 
-    await signupModel.findOneAndUpdate(
-      { email },
-      { password: hashedPassword }
+    // Update both password fields in database
+    const user = await signupModel.findOneAndUpdate(
+      { email: email },
+      { 
+        password: hashedPassword,
+        confirmPassword
+      },
+      { new: true }
     );
 
-    otpStore.delete(email);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
 
-    res.json({ message: 'Password reset successful' });
+    // Clear OTP session data
+    delete req.session.otpData;
+    await new Promise(resolve => req.session.save(resolve));
+
+    return res.status(200).json({
+      success: true,
+      message: "Password updated successfully",
+      redirectUrl: '/user/login'
+    });
+
   } catch (error) {
-    res.status(500).json({ error: 'Server error' });
+    console.error('Password change error:', error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update password"
+    });
   }
-}
-
+};
 
 module.exports={loadsignup,loadLogin,signup,login,email,verifyotp,password,loademail,loadotp,resendotp,resetPassword}

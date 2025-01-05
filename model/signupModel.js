@@ -24,6 +24,11 @@ const signupSchema=new mongoose.Schema({
   confirmPassword:{
     type:String,
     required:true
+  },
+  status:{
+    type: String, 
+    enum: ['active', 'inactive'], 
+    default: 'active' 
   }
 })
 
